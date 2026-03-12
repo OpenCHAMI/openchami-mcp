@@ -7,6 +7,19 @@
 Use this repository for MCP integration work that exposes stable tool names
 over stdio while talking to OpenCHAMI and Kea backends directly.
 
+## OpenCHAMI context
+
+OpenCHAMI is a microservice-based HPC cluster provisioning and management
+system.
+
+In this repository, the MCP layer primarily fronts:
+
+- SMD for inventory and groups
+- BSS for boot parameters and bootscripts
+- cloud-init for metadata rendering
+- power-control for power state and transitions
+- Kea and CoreDHCP integration points for DHCP workflows
+
 ## Scope
 
 - implement and maintain the Go MCP transport and JSON-RPC handling
@@ -36,12 +49,19 @@ over stdio while talking to OpenCHAMI and Kea backends directly.
 - do not invent a CoreDHCP admin API that has not been verified
 - keep write operations guarded by MCP mode plus explicit write acknowledgment
 - add tests for protocol behavior and backend request construction when adding tools
+- default documentation examples to read-only mode unless the task is explicitly
+  about write enablement
 
 ## Local workflow
 
 - use `.env.example` as the baseline config template
 - run `go test ./...` before finishing changes
 - keep the service runnable with `go run ./cmd/openchami-mcp`
+- keep `README.md` aligned with supported MCP client setup for Codex, Claude
+  Code, Gemini CLI, and OpenCode
+- keep repo-local skill material under
+  `.agents/skills/read-only-infrastructure-assistant/` current when agent
+  setup or OpenCHAMI scope changes
 
 ## Alias files
 

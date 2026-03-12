@@ -1,0 +1,7 @@
+interface:
+  display_name: "Read-Only Infra Assistant"
+  short_description: "Inspect OpenCHAMI safely"
+  default_prompt: "Use $read-only-infrastructure-assistant to inspect this OpenCHAMI environment without making changes."
+
+policy:
+  allow_implicit_invocation: true
