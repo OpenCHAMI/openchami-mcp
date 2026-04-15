@@ -207,7 +207,7 @@ OPENCHAMI_MCP_POWER_CONTROL_URL = "http://localhost:28007/v1"
 OPENCHAMI_MCP_KEA_URL = "http://localhost:8000"
 ```
 
-If `openchami-mcp` is running remotely on a host such as `msws` and only
+If `openchami-mcp` is running remotely on a host such as `ochami-tenv1` and only
 listens on `127.0.0.1:8081`, there are two workable access patterns.
 
 Approach 1: separate SSH tunnel plus native HTTP MCP entry.
@@ -215,19 +215,19 @@ Approach 1: separate SSH tunnel plus native HTTP MCP entry.
 Start the tunnel in another terminal:
 
 ```bash
-ssh -N -L 18081:127.0.0.1:8081 msws
+ssh -N -L 18081:127.0.0.1:8081 ochami-tenv1
 ```
 
 Then add the HTTP MCP server:
 
 ```bash
-codex mcp add openchami-msws --url http://127.0.0.1:18081/mcp
+codex mcp add openchami-tenv1 --url http://127.0.0.1:18081/mcp
 ```
 
 Equivalent `~/.codex/config.toml` snippet:
 
 ```toml
-[mcp_servers.openchami-msws]
+[mcp_servers.openchami-tenv1]
 enabled = true
 url = "http://127.0.0.1:18081/mcp"
 ```
@@ -238,9 +238,9 @@ bridges to HTTP with `mcp-remote`.
 CLI:
 
 ```bash
-codex mcp add openchami-msws -- bash -lc 'set -euo pipefail
+codex mcp add openchami-tenv1 -- bash -lc 'set -euo pipefail
 PORT=18081
-ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 msws &
+ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 ochami-tenv1 &
 ssh_pid=$!
 cleanup() { kill "$ssh_pid" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
@@ -254,13 +254,13 @@ exec npx -y mcp-remote "http://127.0.0.1:${PORT}/mcp"'
 Equivalent `~/.codex/config.toml` snippet:
 
 ```toml
-[mcp_servers.openchami-msws]
+[mcp_servers.openchami-tenv1]
 enabled = true
 command = "bash"
 args = ["-lc", """
 set -euo pipefail
 PORT=18081
-ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 msws &
+ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 ochami-tenv1 &
 ssh_pid=$!
 cleanup() { kill "$ssh_pid" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
@@ -314,7 +314,7 @@ the repo root:
 }
 ```
 
-For a remote `openchami-mcp` bound to `127.0.0.1:8081` on `msws`, the same two
+For a remote `openchami-mcp` bound to `127.0.0.1:8081` on `ochami-tenv1`, the same two
 patterns work in Claude Code.
 
 Approach 1: separate SSH tunnel plus native HTTP MCP entry.
@@ -322,13 +322,13 @@ Approach 1: separate SSH tunnel plus native HTTP MCP entry.
 Start the tunnel in another terminal:
 
 ```bash
-ssh -N -L 18081:127.0.0.1:8081 msws
+ssh -N -L 18081:127.0.0.1:8081 ochami-tenv1
 ```
 
 Then add the project-scoped HTTP server:
 
 ```bash
-claude mcp add --scope project --transport http openchami-msws http://127.0.0.1:18081/mcp
+claude mcp add --scope project --transport http openchami-tenv1 http://127.0.0.1:18081/mcp
 ```
 
 Equivalent project-scoped `.mcp.json`:
@@ -336,7 +336,7 @@ Equivalent project-scoped `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "openchami-msws": {
+    "openchami-tenv1": {
       "type": "http",
       "url": "http://127.0.0.1:18081/mcp"
     }
@@ -347,9 +347,9 @@ Equivalent project-scoped `.mcp.json`:
 Approach 2: self-contained stdio wrapper.
 
 ```bash
-claude mcp add --scope project openchami-msws -- bash -lc 'set -euo pipefail
+claude mcp add --scope project openchami-tenv1 -- bash -lc 'set -euo pipefail
 PORT=18081
-ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 msws &
+ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 ochami-tenv1 &
 ssh_pid=$!
 cleanup() { kill "$ssh_pid" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
@@ -365,12 +365,12 @@ Equivalent `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "openchami-msws": {
+    "openchami-tenv1": {
       "type": "stdio",
       "command": "bash",
       "args": [
         "-lc",
-        "set -euo pipefail\nPORT=18081\nssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 msws &\nssh_pid=$!\ncleanup() { kill \"$ssh_pid\" 2>/dev/null || true; }\ntrap cleanup EXIT INT TERM\nfor _ in $(seq 1 50); do\n  curl -sf \"http://127.0.0.1:${PORT}/healthz\" >/dev/null && break\n  sleep 0.2\ndone\nexec npx -y mcp-remote \"http://127.0.0.1:${PORT}/mcp\""
+        "set -euo pipefail\nPORT=18081\nssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 ochami-tenv1 &\nssh_pid=$!\ncleanup() { kill \"$ssh_pid\" 2>/dev/null || true; }\ntrap cleanup EXIT INT TERM\nfor _ in $(seq 1 50); do\n  curl -sf \"http://127.0.0.1:${PORT}/healthz\" >/dev/null && break\n  sleep 0.2\ndone\nexec npx -y mcp-remote \"http://127.0.0.1:${PORT}/mcp\""
       ],
       "env": {}
     }
@@ -424,7 +424,7 @@ Equivalent project-scoped `.gemini/settings.json`:
 }
 ```
 
-For a remote `openchami-mcp` bound to `127.0.0.1:8081` on `msws`, Gemini CLI
+For a remote `openchami-mcp` bound to `127.0.0.1:8081` on `ochami-tenv1`, Gemini CLI
 supports the same two patterns.
 
 Approach 1: separate SSH tunnel plus native HTTP MCP entry.
@@ -432,13 +432,13 @@ Approach 1: separate SSH tunnel plus native HTTP MCP entry.
 Start the tunnel in another terminal:
 
 ```bash
-ssh -N -L 18081:127.0.0.1:8081 msws
+ssh -N -L 18081:127.0.0.1:8081 ochami-tenv1
 ```
 
 Then add the project-scoped HTTP server:
 
 ```bash
-gemini mcp add --scope project --transport http openchami-msws http://127.0.0.1:18081/mcp
+gemini mcp add --scope project --transport http openchami-tenv1 http://127.0.0.1:18081/mcp
 ```
 
 Equivalent `.gemini/settings.json`:
@@ -446,7 +446,7 @@ Equivalent `.gemini/settings.json`:
 ```json
 {
   "mcpServers": {
-    "openchami-msws": {
+    "openchami-tenv1": {
       "url": "http://127.0.0.1:18081/mcp",
       "type": "http"
     }
@@ -457,9 +457,9 @@ Equivalent `.gemini/settings.json`:
 Approach 2: self-contained stdio wrapper.
 
 ```bash
-gemini mcp add --scope project openchami-msws bash -lc 'set -euo pipefail
+gemini mcp add --scope project openchami-tenv1 bash -lc 'set -euo pipefail
 PORT=18081
-ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 msws &
+ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 ochami-tenv1 &
 ssh_pid=$!
 cleanup() { kill "$ssh_pid" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
@@ -475,11 +475,11 @@ Equivalent `.gemini/settings.json`:
 ```json
 {
   "mcpServers": {
-    "openchami-msws": {
+    "openchami-tenv1": {
       "command": "bash",
       "args": [
         "-lc",
-        "set -euo pipefail\nPORT=18081\nssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 msws &\nssh_pid=$!\ncleanup() { kill \"$ssh_pid\" 2>/dev/null || true; }\ntrap cleanup EXIT INT TERM\nfor _ in $(seq 1 50); do\n  curl -sf \"http://127.0.0.1:${PORT}/healthz\" >/dev/null && break\n  sleep 0.2\ndone\nexec npx -y mcp-remote \"http://127.0.0.1:${PORT}/mcp\""
+        "set -euo pipefail\nPORT=18081\nssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L ${PORT}:127.0.0.1:8081 ochami-tenv1 &\nssh_pid=$!\ncleanup() { kill \"$ssh_pid\" 2>/dev/null || true; }\ntrap cleanup EXIT INT TERM\nfor _ in $(seq 1 50); do\n  curl -sf \"http://127.0.0.1:${PORT}/healthz\" >/dev/null && break\n  sleep 0.2\ndone\nexec npx -y mcp-remote \"http://127.0.0.1:${PORT}/mcp\""
       ]
     }
   }

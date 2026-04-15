@@ -15,7 +15,7 @@ protocol version `2024-11-05`.
 - The entrypoint wires the server to `os.Stdin` and `os.Stdout`.
 - Request handling and framing are currently coupled to the stdio loop in
   `internal/mcp/server.go` and `internal/mcp/framing.go`.
-- The packaged `openchami-mcp.container` on `msws` keeps the process alive with
+- The packaged `openchami-mcp.container` on `ochami-tenv1` keeps the process alive with
   a FIFO bridge because systemd is not itself an MCP client.
 
 ## Planning Decisions
@@ -133,7 +133,7 @@ Work:
 - Remove the FIFO bridge for HTTP deployments.
 - Wire the service into `openchami.target` as a normal daemon.
 - Document the port, firewall rules, and local-only default.
-- Add an `msws` deployment path that points the quadlet at HTTP mode for live
+- Add an `ochami-tenv1` deployment path that points the quadlet at HTTP mode for live
   testing.
 
 Deliverable:
@@ -191,7 +191,7 @@ Add or update tests in these layers:
    enough for the first release?
 2. Do we need backward compatibility for legacy `2024-11-05` HTTP+SSE clients,
    or can we standardize on Streamable HTTP only?
-3. Do any planned MCP clients for `msws` require SSE or resumable sessions, or
+3. Do any planned MCP clients for `ochami-tenv1` require SSE or resumable sessions, or
    is plain request/response enough?
 4. Should HTTP auth be built into `openchami-mcp`, or delegated to a reverse
    proxy for the first deployment?
