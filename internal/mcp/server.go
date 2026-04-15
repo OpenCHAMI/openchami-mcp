@@ -1,12 +1,10 @@
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 
 	"github.com/OpenCHAMI/openchami-mcp/internal/clients/httpjson"
@@ -16,123 +14,137 @@ import (
 )
 
 const (
-	protocolVersion = "2024-11-05"
-	serverVersion   = "0.1.0"
+	preferredProtocolVersion = "2025-03-26"
+	legacyProtocolVersion    = "2024-11-05"
+	serverVersion            = "0.1.1"
 )
+
+var supportedProtocolVersions = []string{
+	preferredProtocolVersion,
+	legacyProtocolVersion,
+}
 
 type Server struct {
 	cfg      config.Config
 	registry *tools.Registry
 	logger   *slog.Logger
-	reader   io.Reader
-	writer   io.Writer
 }
 
-type framingState struct {
-	lastInput string
+type HandleResult struct {
+	Messages []map[string]any
+	Exit     bool
 }
 
-func NewServer(cfg config.Config, registry *tools.Registry, logger *slog.Logger, reader io.Reader, writer io.Writer) *Server {
+func NewServer(cfg config.Config, registry *tools.Registry, logger *slog.Logger) *Server {
 	return &Server{
 		cfg:      cfg,
 		registry: registry,
 		logger:   logger,
-		reader:   reader,
-		writer:   writer,
 	}
 }
 
-func (s *Server) Serve(ctx context.Context) error {
-	reader := bufio.NewReader(s.reader)
-	state := &framingState{}
-
-	for {
-		message, err := readMessage(reader, state)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			return err
-		}
-
-		response, exit, err := s.handle(ctx, message)
-		if err != nil {
-			return err
-		}
-		if response != nil {
-			if err := writeMessage(s.writer, state, s.cfg.Framing, response); err != nil {
-				return err
-			}
-		}
-		if exit {
-			return nil
-		}
-	}
-}
-
-func (s *Server) handle(ctx context.Context, message map[string]any) (map[string]any, bool, error) {
+func (s *Server) HandleMessage(ctx context.Context, message map[string]any) (HandleResult, error) {
 	requestID, _ := message["id"]
 
 	method, ok := message["method"].(string)
 	if !ok || method == "" {
-		if requestID == nil {
-			return nil, false, nil
+		if isJSONRPCResponse(message) || requestID == nil {
+			return HandleResult{}, nil
 		}
-		return errorResponse(requestID, -32600, "Invalid Request", nil), false, nil
+		return singleResponse(errorResponse(requestID, -32600, "Invalid Request", nil), false), nil
 	}
 
 	params, _ := message["params"].(map[string]any)
 
 	switch method {
 	case "initialize":
-		return resultResponse(requestID, map[string]any{
-			"protocolVersion": protocolVersion,
+		return singleResponse(resultResponse(requestID, map[string]any{
+			"protocolVersion": negotiateProtocolVersion(params),
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo": map[string]any{
 				"name":    "openchami-mcp",
 				"version": serverVersion,
 			},
-		}), false, nil
+		}), false), nil
 	case "notifications/initialized":
-		return nil, false, nil
+		return HandleResult{}, nil
 	case "ping":
-		return resultResponse(requestID, map[string]any{}), false, nil
+		return singleResponse(resultResponse(requestID, map[string]any{}), false), nil
 	case "tools/list":
-		return resultResponse(requestID, map[string]any{"tools": definitionsAsMCP(s.registry.Definitions())}), false, nil
+		return singleResponse(resultResponse(requestID, map[string]any{"tools": definitionsAsMCP(s.registry.Definitions())}), false), nil
 	case "tools/call":
 		if requestID == nil {
-			return nil, false, nil
+			return HandleResult{}, nil
 		}
 		if params == nil {
-			return errorResponse(requestID, -32602, "Invalid params for tools/call", nil), false, nil
+			return singleResponse(errorResponse(requestID, -32602, "Invalid params for tools/call", nil), false), nil
 		}
 		name, ok := params["name"].(string)
 		if !ok || name == "" {
-			return errorResponse(requestID, -32602, "Missing tool name", nil), false, nil
+			return singleResponse(errorResponse(requestID, -32602, "Missing tool name", nil), false), nil
 		}
 		arguments, _ := params["arguments"].(map[string]any)
 		result, err := s.callTool(ctx, name, arguments)
 		if err != nil {
-			return errorFromTool(requestID, err), false, nil
+			return singleResponse(errorFromTool(requestID, err), false), nil
 		}
-		return resultResponse(requestID, map[string]any{
+		return singleResponse(resultResponse(requestID, map[string]any{
 			"content": []map[string]any{
 				{
 					"type": "text",
 					"text": encodeToolResult(result),
 				},
 			},
-		}), false, nil
+		}), false), nil
 	case "shutdown":
-		return resultResponse(requestID, map[string]any{}), false, nil
+		return singleResponse(resultResponse(requestID, map[string]any{}), false), nil
 	case "exit":
-		return nil, true, nil
+		return HandleResult{Exit: true}, nil
 	default:
 		if requestID == nil {
-			return nil, false, nil
+			return HandleResult{}, nil
 		}
-		return errorResponse(requestID, -32601, fmt.Sprintf("Method not found: %s", method), nil), false, nil
+		return singleResponse(errorResponse(requestID, -32601, fmt.Sprintf("Method not found: %s", method), nil), false), nil
 	}
+}
+
+func singleResponse(message map[string]any, exit bool) HandleResult {
+	if message == nil {
+		return HandleResult{Exit: exit}
+	}
+	return HandleResult{
+		Messages: []map[string]any{message},
+		Exit:     exit,
+	}
+}
+
+func isJSONRPCResponse(message map[string]any) bool {
+	if message == nil {
+		return false
+	}
+	_, hasResult := message["result"]
+	_, hasError := message["error"]
+	return hasResult || hasError
+}
+
+func negotiateProtocolVersion(params map[string]any) string {
+	if params != nil {
+		if requested, _ := params["protocolVersion"].(string); requested != "" {
+			if supportsProtocolVersion(requested) {
+				return requested
+			}
+		}
+	}
+	return preferredProtocolVersion
+}
+
+func supportsProtocolVersion(version string) bool {
+	for _, candidate := range supportedProtocolVersions {
+		if candidate == version {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) callTool(ctx context.Context, name string, arguments map[string]any) (any, error) {

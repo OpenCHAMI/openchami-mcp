@@ -3,12 +3,15 @@ package httpjson
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -24,6 +27,8 @@ type Config struct {
 	Timeout     time.Duration
 	Retries     int
 	BearerToken string
+	TLSCAFile   string
+	TLSInsecure bool
 }
 
 type Client struct {
@@ -58,7 +63,7 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("%s %s failed with status %d", e.Method, e.URL, e.StatusCode)
 }
 
-func NewClient(cfg Config) *Client {
+func NewClient(cfg Config) (*Client, error) {
 	timeout := cfg.Timeout
 	if timeout <= 0 {
 		timeout = 10 * time.Second
@@ -68,15 +73,21 @@ func NewClient(cfg Config) *Client {
 		retries = 0
 	}
 
+	transport, err := newTransport(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Client{
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
 		timeout: timeout,
 		retries: retries,
 		httpClient: &http.Client{
-			Timeout: timeout,
+			Timeout:   timeout,
+			Transport: transport,
 		},
 		bearerToken: cfg.BearerToken,
-	}
+	}, nil
 }
 
 func (c *Client) Configured() bool {
@@ -228,4 +239,33 @@ func normalizeBody(status int, contentType string, raw []byte) any {
 		"status": status,
 		"text":   string(raw),
 	}
+}
+
+func newTransport(cfg Config) (http.RoundTripper, error) {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: cfg.TLSInsecure,
+	}
+
+	if cfg.TLSCAFile != "" {
+		pemBytes, err := os.ReadFile(cfg.TLSCAFile)
+		if err != nil {
+			return nil, fmt.Errorf("read CA file %q: %w", cfg.TLSCAFile, err)
+		}
+		rootCAs, err := x509.SystemCertPool()
+		if err != nil {
+			rootCAs = x509.NewCertPool()
+		}
+		if rootCAs == nil {
+			rootCAs = x509.NewCertPool()
+		}
+		if ok := rootCAs.AppendCertsFromPEM(pemBytes); !ok {
+			return nil, fmt.Errorf("append CA file %q: no certificates found", cfg.TLSCAFile)
+		}
+		tlsConfig.RootCAs = rootCAs
+	}
+
+	transport.TLSClientConfig = tlsConfig
+	return transport, nil
 }

@@ -17,12 +17,17 @@ func TestKeaRunCommandBuildsExpectedPayload(t *testing.T) {
 		_, _ = w.Write([]byte(`{"result":0}`))
 	})
 
-	backend := NewKeaBackend(httpjson.NewClient(httpjson.Config{
+	client, err := httpjson.NewClient(httpjson.Config{
 		BaseURL: server.URL(),
 		Timeout: time.Second,
-	}), []string{"dhcp4"})
+	})
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
 
-	_, err := backend.RunCommand(context.Background(), "config-set", map[string]any{
+	backend := NewKeaBackend(client, []string{"dhcp4"})
+
+	_, err = backend.RunCommand(context.Background(), "config-set", map[string]any{
 		"Dhcp4": map[string]any{"interfaces-config": map[string]any{}},
 	}, []string{"dhcp4"})
 	if err != nil {

@@ -12,6 +12,9 @@ const (
 	ModeReadOnly  = "read-only"
 	ModeReadWrite = "read-write"
 
+	TransportStdio = "stdio"
+	TransportHTTP  = "http"
+
 	FramingAuto          = "auto"
 	FramingJSONL         = "jsonl"
 	FramingContentLength = "content-length"
@@ -29,6 +32,8 @@ type HTTPService struct {
 	Timeout     time.Duration
 	Retries     int
 	BearerToken string
+	TLSCAFile   string
+	TLSInsecure bool
 }
 
 type KeaService struct {
@@ -36,12 +41,22 @@ type KeaService struct {
 	DefaultServices []string
 }
 
+type HTTPTransport struct {
+	ListenAddr     string
+	BasePath       string
+	HealthPath     string
+	AllowedOrigins []string
+	BearerToken    string
+}
+
 type Config struct {
 	Mode            string
+	Transport       string
 	Framing         string
 	LogLevel        string
 	RequireWriteAck bool
 	EnableWrites    bool
+	HTTP            HTTPTransport
 
 	SMD          HTTPService
 	BSS          HTTPService
@@ -54,14 +69,22 @@ type Config struct {
 func LoadFromEnv() (Config, error) {
 	cfg := Config{
 		Mode:            envString("OPENCHAMI_MCP_MODE", ModeReadOnly),
+		Transport:       envString("OPENCHAMI_MCP_TRANSPORT", TransportStdio),
 		Framing:         envString("OPENCHAMI_MCP_FRAMING", FramingAuto),
 		LogLevel:        envString("OPENCHAMI_MCP_LOG_LEVEL", "info"),
 		RequireWriteAck: envBool("OPENCHAMI_MCP_REQUIRE_WRITE_ACK", true),
 		EnableWrites:    envBool("OPENCHAMI_MCP_ENABLE_WRITES", false),
-		SMD:             loadHTTPService("OPENCHAMI_MCP_SMD"),
-		BSS:             loadHTTPService("OPENCHAMI_MCP_BSS"),
-		CloudInit:       loadHTTPService("OPENCHAMI_MCP_CLOUD_INIT"),
-		PowerControl:    loadHTTPService("OPENCHAMI_MCP_POWER_CONTROL"),
+		HTTP: HTTPTransport{
+			ListenAddr:     envString("OPENCHAMI_MCP_LISTEN_ADDR", "127.0.0.1:8081"),
+			BasePath:       envString("OPENCHAMI_MCP_BASE_PATH", "/mcp"),
+			HealthPath:     envString("OPENCHAMI_MCP_HEALTH_PATH", "/healthz"),
+			AllowedOrigins: envCSV("OPENCHAMI_MCP_ALLOWED_ORIGINS"),
+			BearerToken:    envString("OPENCHAMI_MCP_HTTP_BEARER_TOKEN", ""),
+		},
+		SMD:          loadHTTPService("OPENCHAMI_MCP_SMD"),
+		BSS:          loadHTTPService("OPENCHAMI_MCP_BSS"),
+		CloudInit:    loadHTTPService("OPENCHAMI_MCP_CLOUD_INIT"),
+		PowerControl: loadHTTPService("OPENCHAMI_MCP_POWER_CONTROL"),
 		Kea: KeaService{
 			HTTPService:     loadHTTPService("OPENCHAMI_MCP_KEA"),
 			DefaultServices: envCSV("OPENCHAMI_MCP_KEA_DEFAULT_SERVICES"),
@@ -77,6 +100,12 @@ func (c Config) Validate() error {
 	case ModeReadOnly, ModeReadWrite:
 	default:
 		return fmt.Errorf("unsupported OPENCHAMI_MCP_MODE %q", c.Mode)
+	}
+
+	switch c.Transport {
+	case TransportStdio, TransportHTTP:
+	default:
+		return fmt.Errorf("unsupported OPENCHAMI_MCP_TRANSPORT %q", c.Transport)
 	}
 
 	switch c.Framing {
@@ -110,6 +139,20 @@ func (c Config) Validate() error {
 		}
 	}
 
+	if c.HTTP.ListenAddr == "" {
+		return fmt.Errorf("OPENCHAMI_MCP_LISTEN_ADDR cannot be empty")
+	}
+
+	if !strings.HasPrefix(c.HTTP.BasePath, "/") {
+		return fmt.Errorf("OPENCHAMI_MCP_BASE_PATH must start with '/'")
+	}
+	if !strings.HasPrefix(c.HTTP.HealthPath, "/") {
+		return fmt.Errorf("OPENCHAMI_MCP_HEALTH_PATH must start with '/'")
+	}
+	if c.HTTP.BasePath == c.HTTP.HealthPath {
+		return fmt.Errorf("OPENCHAMI_MCP_BASE_PATH and OPENCHAMI_MCP_HEALTH_PATH must differ")
+	}
+
 	return nil
 }
 
@@ -119,6 +162,8 @@ func loadHTTPService(prefix string) HTTPService {
 		Timeout:     envDuration(prefix+"_TIMEOUT", 10*time.Second),
 		Retries:     envInt(prefix+"_RETRIES", 1),
 		BearerToken: envString(prefix+"_BEARER_TOKEN", ""),
+		TLSCAFile:   envString(prefix+"_TLS_CA_FILE", ""),
+		TLSInsecure: envBool(prefix+"_TLS_INSECURE_SKIP_VERIFY", false),
 	}
 }
 

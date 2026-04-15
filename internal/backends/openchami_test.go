@@ -17,10 +17,15 @@ func TestSMDGroupMemberRequests(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 
-	backend := NewSMDBackend(httpjson.NewClient(httpjson.Config{
+	client, err := httpjson.NewClient(httpjson.Config{
 		BaseURL: server.URL(),
 		Timeout: time.Second,
-	}))
+	})
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+
+	backend := NewSMDBackend(client)
 
 	ctx := context.Background()
 
@@ -63,10 +68,15 @@ func TestCloudInitImpersonationPaths(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	backend := NewCloudInitBackend(httpjson.NewClient(httpjson.Config{
+	client, err := httpjson.NewClient(httpjson.Config{
 		BaseURL: server.URL(),
 		Timeout: time.Second,
-	}))
+	})
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+
+	backend := NewCloudInitBackend(client)
 
 	ctx := context.Background()
 
