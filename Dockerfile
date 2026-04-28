@@ -14,7 +14,7 @@ RUN go build -trimpath -ldflags="-s -w" -o /out/openchami-mcp ./cmd/openchami-mc
 
 FROM cgr.dev/chainguard/wolfi-base:latest
 
-RUN apk add --no-cache ca-certificates tini
+RUN apk add --no-cache ca-certificates tini curl
 
 ENV OPENCHAMI_MCP_MODE=read-only \
     OPENCHAMI_MCP_ENABLE_WRITES=false \
